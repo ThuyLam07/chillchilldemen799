@@ -3,13 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hand Text Effect - Beautiful Glow Particles</title>
+    <title>Hand Text Effect - Dark Moody Mode</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
         #webcam { 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
             object-fit: cover; z-index: -2; transform: scaleX(-1); 
-            filter: grayscale(100%) brightness(1.15) contrast(1.2);
+            filter: brightness(0.7) contrast(1.3) saturate(0.7); /* Tối moody, tay vẫn rõ */
+        }
+        /* Lớp overlay đen mờ để che thêm, kiểu dim dark */
+        #dark-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.35); /* Mờ mờ đen, che mặt nhẹ nhưng thấy tay */
+            pointer-events: none; z-index: -1;
         }
         canvas { display: block; position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; }
        
@@ -27,6 +33,7 @@
 </head>
 <body>
     <video id="webcam" autoplay playsinline muted></video>
+    <div id="dark-overlay"></div> <!-- Lớp che mờ đen -->
    
     <div id="ui">
         <div class="status">
@@ -40,7 +47,8 @@
     </div>
     <div id="hint">
         Tay 1: Giơ 1-2-3 ngón để đổi chữ<br>
-        Tay 2: Nắm = chữ gọn lại | Mở = chữ tan nhẹ | Di tay gần = hạt bay lung linh
+        Tay 2: Nắm = chữ gọn | Mở = chữ tan | Di tay gần = hạt bay lung linh<br>
+        Giờ nền tối mờ mờ che mặt rồi nha 😏
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
@@ -52,7 +60,7 @@
         import * as THREE from 'three';
 
         const WORDS = ["Hello", "Thuý Lâm", "t là trùm trường :))"];
-        const MAX_PTS = 12000; // Tăng số hạt để chữ dày đẹp hơn
+        const MAX_PTS = 12000;
        
         let currentIdx = 0;
         let isActive2 = false;
@@ -71,7 +79,6 @@
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // Tạo texture vòng tròn mềm mại cho hạt (glow effect)
         function createCircleTexture() {
             const size = 64;
             const canvas = document.createElement('canvas');
@@ -98,7 +105,7 @@
             map: circleTexture,
             transparent: true,
             opacity: 1,
-            blending: THREE.AdditiveBlending, // Glow đẹp lung linh!
+            blending: THREE.AdditiveBlending,
             depthWrite: false,
             vertexColors: true
         });
@@ -115,7 +122,6 @@
         const points = new THREE.Points(geo, mat);
         scene.add(points);
 
-        // --- TẠO ĐIỂM CHỮ ---
         function getPoints(text) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -127,7 +133,7 @@
            
             const data = ctx.getImageData(0, 0, 1200, 400).data;
             const pts = [];
-            for (let y = 0; y < 400; y += 3) { // Mật độ cao hơn
+            for (let y = 0; y < 400; y += 3) {
                 for (let x = 0; x < 1200; x += 3) {
                     if (data[(x + y * 1200) * 4] > 100) {
                         pts.push({ 
@@ -144,13 +150,13 @@
             if (index === currentIdx) return;
             currentIdx = index;
             const targetData = getPoints(WORDS[index]);
-            const hue = Math.random() * 0.3 + 0.45; // Màu xanh - tím - hồng đẹp
+            const hue = Math.random() * 0.3 + 0.45;
             const newColor = new THREE.Color().setHSL(hue, 0.9, 0.6);
             
             particles.forEach((p, i) => {
                 if (i < targetData.length) {
                     p.dest.set(targetData[i].x, targetData[i].y, 0);
-                    p.curr.lerp(p.dest, 0.5); // Chuyển mượt hơn
+                    p.curr.lerp(p.dest, 0.5);
                     p.vel.set(0,0,0);
                 } else {
                     p.dest.set(0, 0, -2000);
@@ -163,7 +169,6 @@
 
         triggerWord(0);
 
-        // --- HAND DETECTION ---
         function onResults(results) {
             const hands = results.multiHandLandmarks;
             if (hands && hands.length > 0) {
@@ -205,7 +210,6 @@
         const cameraUtils = new Camera(video, { onFrame: async () => await handsAI.send({ image: video }), width: 1280, height: 720 });
         cameraUtils.start();
 
-        // --- ANIMATION ---
         function animate() {
             requestAnimationFrame(animate);
             const time = performance.now() * 0.001;
@@ -216,12 +220,10 @@
             particles.forEach((p, i) => {
                 if (isActive2) {
                     if (isFist2) {
-                        // Nắm tay → hút mạnh, gọn gàng
                         const force = 0.35;
                         p.acc.x += (p.dest.x - p.curr.x) * force;
                         p.acc.y += (p.dest.y - p.curr.y) * force;
                     } else {
-                        // Mở tay → tan nhẹ + đẩy khi gần tay
                         const explode = 0.01;
                         p.acc.x += (p.curr.x - p.dest.x) * explode;
                         p.acc.y += (p.curr.y - p.dest.y) * explode;
