@@ -3,32 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Hand Gesture Particles - Pro Version</title>
+    <title>3D Particle Gesture Experience</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
-        #webcam-raw { display: none; }
-        #bg-video { position: fixed; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: -1; transform: scaleX(-1); filter: brightness(0.35); }
+        #webcam { position: fixed; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; transform: scaleX(-1); filter: brightness(0.4) contrast(1.1); }
         canvas { display: block; position: absolute; top: 0; left: 0; z-index: 1; }
         
-        #overlay-ui {
+        #ui-overlay {
             position: absolute; top: 30px; left: 30px; z-index: 10;
-            color: white; pointer-events: none; text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            color: rgba(255, 255, 255, 0.8); pointer-events: none;
         }
-        .info-tag { background: rgba(255,255,255,0.1); padding: 5px 15px; border-radius: 20px; backdrop-filter: blur(5px); margin-bottom: 10px; font-size: 14px; border: 1px solid rgba(255,255,255,0.2); }
-        #hint { position: absolute; bottom: 30px; width: 100%; text-align: center; color: rgba(255,255,255,0.6); z-index: 10; font-size: 13px; letter-spacing: 1px; }
+        .status-box { background: rgba(0,0,0,0.3); padding: 10px 20px; border-radius: 15px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); margin-bottom: 10px; }
+        #instruction { position: absolute; bottom: 30px; width: 100%; text-align: center; color: white; opacity: 0.5; font-size: 14px; letter-spacing: 2px; z-index: 5; }
     </style>
 </head>
 <body>
 
-    <video id="webcam-raw" autoplay playsinline></video>
-    <video id="bg-video" autoplay playsinline></video>
-
-    <div id="overlay-ui">
-        <div class="info-tag" id="word-display">Nội dung: Đang chờ...</div>
-        <div class="info-tag" id="gesture-display">Cử chỉ: None</div>
+    <video id="webcam" autoplay playsinline></video>
+    
+    <div id="ui-overlay">
+        <div class="status-box" id="word-tag">Hạt đang phân tán...</div>
+        <div class="status-box" id="hand-tag">Đưa tay vào để bắt đầu</div>
     </div>
 
-    <div id="hint">1 NGÓN: HELLO | 2 NGÓN: THUÝ LÂM | 3 NGÓN: TRÙM TRƯỜNG | NẮM TAY: SIẾT CHỮ</div>
+    <div id="instruction">1 NGÓN: HELLO | 2 NGÓN: THUÝ LÂM | 3 NGÓN: TRÙM TRƯỜNG | NẮM TAY: SIẾT</div>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
@@ -40,130 +38,121 @@
         import * as THREE from 'three';
 
         // --- CẤU HÌNH ---
-        const TEXTS = ["Hello", "Thuý Lâm", "t là trùm trường :))"];
-        const MAX_PARTICLES = 8000;
+        const WORDS = ["Hello", "Thuý Lâm", "t là trùm trường :))"];
+        const PARTICLE_COUNT = 9000;
         let currentWordIndex = -1;
         let isFist = false;
         let mainHandPos = new THREE.Vector3(-1000, 0, 0);
-        let secondHandPos = new THREE.Vector3(-1000, 0, 0);
+        let secondaryHandPos = new THREE.Vector3(-1000, 0, 0);
 
-        // --- THREE.JS INITIALIZATION ---
+        // --- SETUP THREE.JS ---
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 2000);
-        camera.position.z = 500;
+        camera.position.z = 550;
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         document.body.appendChild(renderer.domElement);
 
         const particles = [];
-        const geometry = new THREE.BufferGeometry();
+        const geo = new THREE.BufferGeometry();
+        const positions = new Float32Array(PARTICLE_COUNT * 3);
+        const colors = new Float32Array(PARTICLE_COUNT * 3);
+
         const material = new THREE.PointsMaterial({
-            size: 3.8,
+            size: 3.5,
             vertexColors: true,
             transparent: true,
-            opacity: 0.8,
+            opacity: 0.7,
             blending: THREE.AdditiveBlending,
-            depthTest: false
+            sizeAttenuation: true
         });
 
-        // Tạo pool hạt ban đầu
-        for (let i = 0; i < MAX_PARTICLES; i++) {
+        // Khởi tạo các hạt ở vị trí ngẫu nhiên
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
             particles.push({
-                pos: new THREE.Vector3((Math.random()-0.5)*1500, (Math.random()-0.5)*1000, (Math.random()-0.5)*500),
-                dest: new THREE.Vector3(0, 0, 0),
+                curr: new THREE.Vector3((Math.random()-0.5)*1500, (Math.random()-0.5)*1000, (Math.random()-0.5)*400),
+                dest: new THREE.Vector3((Math.random()-0.5)*1500, (Math.random()-0.5)*1000, (Math.random()-0.5)*400),
                 vel: new THREE.Vector3(),
                 acc: new THREE.Vector3(),
-                color: new THREE.Color(),
-                active: false
+                color: new THREE.Color()
             });
         }
 
-        const points = new THREE.Points(geometry, material);
+        const points = new THREE.Points(geo, material);
         scene.add(points);
 
-        // --- HÀM XỬ LÝ CHỮ ---
-        function generateTextPoints(text) {
+        // --- LOGIC CHỮ ---
+        function getWordPoints(text) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             canvas.width = 1200; canvas.height = 400;
             ctx.fillStyle = 'white';
-            ctx.font = '900 110px Arial';
+            ctx.font = '900 100px Arial';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(text, 600, 200);
-
-            const imgData = ctx.getImageData(0, 0, 1200, 400).data;
-            const points = [];
+            
+            const data = ctx.getImageData(0, 0, 1200, 400).data;
+            const pts = [];
             for (let y = 0; y < 400; y += 4) {
                 for (let x = 0; x < 1200; x += 4) {
-                    if (imgData[(x + y * 1200) * 4] > 128) {
-                        points.push({ x: x - 600, y: -(y - 200) });
+                    if (data[(x + y * 1200) * 4] > 128) {
+                        pts.push({ x: x - 600, y: -(y - 200) });
                     }
                 }
             }
-            return points;
+            return pts;
         }
 
-        function updateWord(index) {
+        function setWord(index) {
             if (index === currentWordIndex) return;
             currentWordIndex = index;
-            const targetPoints = generateTextPoints(TEXTS[index]);
-            const baseColor = new THREE.Color().setHSL(Math.random(), 0.4, 0.7);
+            const targetData = getWordPoints(WORDS[index]);
+            document.getElementById('word-tag').innerText = `Chữ: ${WORDS[index]}`;
 
             particles.forEach((p, i) => {
-                if (i < targetPoints.length) {
-                    p.dest.set(targetPoints[i].x, targetPoints[i].y, 0);
-                    p.active = true;
+                if (i < targetData.length) {
+                    p.dest.set(targetData[i].x, targetData[i].y, 0);
                 } else {
-                    p.active = false;
-                    // Hạt thừa bay tản ra xung quanh
-                    p.dest.set((Math.random()-0.5)*2000, (Math.random()-0.5)*1500, -500);
+                    // Hạt dư thừa bay rải rác phía sau
+                    p.dest.set((Math.random()-0.5)*1800, (Math.random()-0.5)*1200, -300);
                 }
-                p.color.copy(baseColor);
             });
-            document.getElementById('word-display').innerText = `Nội dung: ${TEXTS[index]}`;
         }
 
-        // --- AI GESTURE LOGIC (MEDIAPIPE) ---
+        // --- HAND TRACKING ---
         function onResults(results) {
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const hand1 = results.multiHandLandmarks[0];
                 
-                // 1. Tọa độ tay chính
-                mainHandPos.set((1 - hand1[9].x - 0.5) * 1200, -(hand1[9].y - 0.5) * 800, 50);
+                // Map tọa độ MediaPipe (0-1) sang Three.js
+                mainHandPos.set((1 - hand1[9].x - 0.5) * 1200, -(hand1[9].y - 0.5) * 800, 0);
 
-                // 2. Đếm ngón tay (Logic: Đầu ngón cao hơn khớp đốt ngón)
-                const extendedFingers = [
-                    hand1[8].y < hand1[6].y,  // Trỏ
-                    hand1[12].y < hand1[10].y, // Giữa
-                    hand1[16].y < hand1[14].y, // Áp út
-                    hand1[20].y < hand1[18].y  // Út
-                ].filter(Boolean).length;
+                // Đếm ngón tay (So sánh đầu ngón với khớp đốt ngón)
+                const fingers = [8, 12, 16, 20].filter(i => hand1[i].y < hand1[i-2].y).length;
+                if (fingers === 1) setWord(0);
+                else if (fingers === 2) setWord(1);
+                else if (fingers === 3) setWord(2);
 
-                if (extendedFingers === 1) updateWord(0);
-                else if (extendedFingers === 2) updateWord(1);
-                else if (extendedFingers === 3) updateWord(2);
+                // Check Nắm tay (Khoảng cách đầu ngón trỏ tới lòng bàn tay)
+                const dist = Math.hypot(hand1[8].x - hand1[0].x, hand1[8].y - hand1[0].y);
+                isFist = dist < 0.2;
+                document.getElementById('hand-tag').innerText = isFist ? "Trạng thái: SIẾT CHẶT" : "Trạng thái: TƯƠNG TÁC";
 
-                // 3. Nắm tay (Fist detection: Khoảng cách đầu ngón tới lòng bàn tay)
-                const palm = hand1[0];
-                const tip = hand1[8];
-                const dist = Math.hypot(tip.x - palm.x, tip.y - palm.y);
-                isFist = dist < 0.18;
-                document.getElementById('gesture-display').innerText = isFist ? "Cử chỉ: NẮM TAY (SIẾT)" : "Cử chỉ: MỞ TAY";
-
-                // 4. Tay phụ (nếu có)
+                // Tay phụ
                 if (results.multiHandLandmarks.length > 1) {
                     const hand2 = results.multiHandLandmarks[1];
-                    secondHandPos.set((1 - hand2[9].x - 0.5) * 1200, -(hand2[9].y - 0.5) * 800, 50);
+                    secondaryHandPos.set((1 - hand2[9].x - 0.5) * 1200, -(hand2[9].y - 0.5) * 800, 0);
                 } else {
-                    secondHandPos.set(-2000, 0, 0);
+                    secondaryHandPos.set(-2000, 0, 0);
                 }
             } else {
                 mainHandPos.set(-2000, 0, 0);
-                secondHandPos.set(-2000, 0, 0);
-                isFist = false;
+                secondaryHandPos.set(-2000, 0, 0);
+                currentWordIndex = -1;
+                document.getElementById('word-tag').innerText = "Hạt đang phân tán...";
             }
         }
 
@@ -171,13 +160,9 @@
         hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
         hands.onResults(onResults);
 
-        const videoRaw = document.getElementById('webcam-raw');
-        const videoBg = document.getElementById('bg-video');
-        const cam = new Camera(videoRaw, {
-            onFrame: async () => { 
-                await hands.send({ image: videoRaw }); 
-                if (videoBg.srcObject !== videoRaw.srcObject) videoBg.srcObject = videoRaw.srcObject;
-            },
+        const video = document.getElementById('webcam');
+        const cam = new Camera(video, {
+            onFrame: async () => { await hands.send({ image: video }); },
             width: 1280, height: 720
         });
         cam.start();
@@ -185,57 +170,52 @@
         // --- ANIMATION LOOP ---
         function animate() {
             requestAnimationFrame(animate);
-            const time = Date.now() * 0.002;
-
-            const posAttr = new Float32Array(MAX_PARTICLES * 3);
-            const colAttr = new Float32Array(MAX_PARTICLES * 3);
+            const time = Date.now() * 0.001;
 
             particles.forEach((p, i) => {
-                // Vật lý cơ bản: Lực hồi quy về chữ
-                // Nếu nắm tay: Lực hút cực mạnh (0.2). Nếu mở tay: Lực hút nhẹ (0.04). Nếu không tay: Tan rã (0.002)
-                let spring = (mainHandPos.x < -1500) ? 0.002 : (isFist ? 0.2 : 0.04);
-                
-                p.acc.x += (p.dest.x - p.pos.x) * spring;
-                p.acc.y += (p.dest.y - p.pos.y) * spring;
-                p.acc.z += (p.dest.z - p.pos.z) * spring;
+                // 1. LỰC HỒI QUY (Tụ lại thành chữ)
+                // Nếu không có tay: hạt bay tự do (lực cực yếu). Nếu nắm tay: lực cực mạnh.
+                let spring = 0.005;
+                if (currentWordIndex !== -1) spring = isFist ? 0.15 : 0.04;
 
-                // Tương tác tay phụ (Lực xoáy Vortex)
-                const d2 = p.pos.distanceTo(secondHandPos);
-                if (d2 < 200) {
-                    const pct = (200 - d2) / 200;
-                    p.acc.x += Math.cos(time + i * 0.1) * pct * 15;
-                    p.acc.y += Math.sin(time + i * 0.1) * pct * 15;
+                p.acc.x += (p.dest.x - p.curr.x) * spring;
+                p.acc.y += (p.dest.y - p.curr.y) * spring;
+                p.acc.z += (p.dest.z - p.curr.z) * spring;
+
+                // 2. TƯƠNG TÁC TAY PHỤ (Lực đẩy/Xoáy)
+                const dist2 = p.curr.distanceTo(secondaryHandPos);
+                if (dist2 < 180) {
+                    const force = (180 - dist2) / 180;
+                    p.acc.x += Math.cos(time + i) * force * 15;
+                    p.acc.y += Math.sin(time + i) * force * 15;
+                    p.acc.x -= (secondaryHandPos.x - p.curr.x) * force * 0.1;
                 }
 
-                // Noise lơ lửng
-                p.acc.x += Math.sin(time * 0.3 + i) * 0.15;
-                p.acc.y += Math.cos(time * 0.3 + i) * 0.15;
-
-                // Update vật lý
+                // 3. VẬT LÝ & QUÁN TÍNH
                 p.vel.add(p.acc);
-                p.pos.add(p.vel);
-                p.vel.multiplyScalar(0.85); // Ma sát/Quán tính
+                p.curr.add(p.vel);
+                p.vel.multiplyScalar(0.88); // Friction
                 p.acc.set(0, 0, 0);
 
-                // Gán dữ liệu Buffer
-                posAttr[i*3] = p.pos.x;
-                posAttr[i*3+1] = p.pos.y;
-                posAttr[i*3+2] = p.pos.z;
+                // Cập nhật mảng Buffer cho GPU
+                positions[i*3] = p.curr.x;
+                positions[i*3+1] = p.curr.y;
+                positions[i*3+2] = p.curr.z;
 
-                // Màu sắc chuyển động theo thời gian (HSL nhạt)
-                const h = (time * 0.02 + i * 0.0001) % 1;
-                p.color.setHSL(h, 0.4, 0.6);
-                colAttr[i*3] = p.color.r;
-                colAttr[i*3+1] = p.color.g;
-                colAttr[i*3+2] = p.color.b;
+                // 4. MÀU SẮC (HSL Pastel dịu mắt)
+                const hue = (time * 0.05 + i * 0.0001) % 1;
+                p.color.setHSL(hue, 0.5, 0.7);
+                colors[i*3] = p.color.r;
+                colors[i*3+1] = p.color.g;
+                colors[i*3+2] = p.color.b;
             });
 
-            geometry.setAttribute('position', new THREE.BufferAttribute(posAttr, 3));
-            geometry.setAttribute('color', new THREE.BufferAttribute(colAttr, 3));
-            geometry.attributes.position.needsUpdate = true;
+            geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geo.attributes.position.needsUpdate = true;
 
-            // Hiệu ứng camera nhẹ theo tay
-            camera.position.x += (mainHandPos.x * 0.05 - camera.position.x) * 0.05;
+            // Camera nhẹ nhàng chuyển động theo tay chính
+            camera.position.x += (mainHandPos.x * 0.1 - camera.position.x) * 0.05;
             camera.lookAt(0, 0, 0);
 
             renderer.render(scene, camera);
