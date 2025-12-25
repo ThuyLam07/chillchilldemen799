@@ -12,10 +12,10 @@
             filter: grayscale(100%) brightness(1.15) contrast(1.2);
         }
         canvas { display: block; position: absolute; top: 0; left: 0; z-index: 1; pointer-events: none; }
-      
+     
         #ui {
             position: absolute; top: 20px; left: 20px; z-index: 10;
-            color: white; pointer-events: none;
+            color: white; pointer-events: auto; /* Cho phép tương tác với color picker */
         }
         .status { background: rgba(0,0,0,0.6); padding: 12px 20px; border-radius: 8px; margin-bottom: 10px; border-left: 5px solid #00ffff; backdrop-filter: blur(4px); }
         #hint {
@@ -23,11 +23,18 @@
             color: white; text-shadow: 0 2px 8px rgba(0,0,0,0.9); z-index: 5;
             font-size: 16px; font-weight: bold; line-height: 1.6;
         }
+        #color-picker-container {
+            display: flex; align-items: center; gap: 10px;
+            background: rgba(0,0,0,0.6); padding: 12px 20px; border-radius: 8px; margin-bottom: 10px;
+            border-left: 5px solid #ff00ff; backdrop-filter: blur(4px);
+        }
+        #color-picker-container small { flex-shrink: 0; }
+        #color-picker { width: 40px; height: 40px; border: none; cursor: pointer; border-radius: 4px; }
     </style>
 </head>
 <body>
     <video id="webcam" autoplay playsinline muted></video>
-  
+ 
     <div id="ui">
         <div class="status">
             <small>TAY 1 (CHỌN CHỮ):</small>
@@ -37,10 +44,15 @@
             <small>TAY 2 (HIỆU ỨNG):</small>
             <div id="effect-val" style="font-size: 18px;">CHƯA CÓ TAY 2</div>
         </div>
+        <div id="color-picker-container">
+            <small>MÀU HẠT:</small>
+            <input type="color" id="color-picker" value="#00ffff">
+        </div>
     </div>
     <div id="hint">
         Tay 1: Giơ 1-2-3 ngón để đổi chữ<br>
-        Tay 2: Nắm = chữ gọn lại | Mở = chữ tan nhẹ | Di tay gần = hạt bay lung linh
+        Tay 2: Nắm = chữ gọn lại | Mở = chữ tan nhẹ | Di tay gần = hạt bay lung linh<br>
+        Chọn màu hạt ở góc trên trái để thay đổi màu sắc
     </div>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
@@ -51,12 +63,13 @@
         import * as THREE from 'three';
         const WORDS = ["Hello", "Thuý Lâm", "t là trùm trường :))"];
         const MAX_PTS = 12000; // Tăng số hạt để chữ dày đẹp hơn
-      
+     
         let currentIdx = 0;
         let isActive2 = false;
         let isFist2 = false;
         let hand2Pos = new THREE.Vector3();
         let hand2Vel = new THREE.Vector3();
+        let particleColor = new THREE.Color(0x00ffff); // Màu mặc định
         // --- THREE.JS SETUP ---
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 1, 3000);
@@ -115,7 +128,7 @@
             ctx.font = 'bold 160px Arial';
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillText(text, 600, 200);
-          
+         
             const data = ctx.getImageData(0, 0, 1200, 400).data;
             const pts = [];
             for (let y = 0; y < 400; y += 3) { // Mật độ cao hơn
@@ -134,9 +147,8 @@
             if (index === currentIdx) return;
             currentIdx = index;
             const targetData = getPoints(WORDS[index]);
-            const hue = Math.random() * 0.3 + 0.45; // Màu xanh - tím - hồng đẹp
-            const newColor = new THREE.Color().setHSL(hue, 0.9, 0.6);
-           
+            const newColor = particleColor; // Sử dụng màu từ color picker
+          
             particles.forEach((p, i) => {
                 if (i < targetData.length) {
                     p.dest.set(targetData[i].x, targetData[i].y, 0);
@@ -151,6 +163,13 @@
             document.getElementById('word-val').innerText = WORDS[index];
         }
         triggerWord(0);
+        // --- COLOR PICKER ---
+        const colorPicker = document.getElementById('color-picker');
+        colorPicker.addEventListener('input', (e) => {
+            particleColor.set(e.target.value);
+            particles.forEach(p => p.color.copy(particleColor));
+            // Cập nhật ngay lập tức trong animate
+        });
         // --- HAND DETECTION ---
         function onResults(results) {
             const hands = results.multiHandLandmarks;
