@@ -3,39 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Instant Text & Natural Camera</title>
+    <title>Fixed Instant Text - Dual Hand</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
-        /* CẬP NHẬT: Đã bỏ filter brightness để cam màu trắng bình thường */
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
+        /* Camera màu trắng tự nhiên */
         #webcam { position: fixed; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; transform: scaleX(-1); }
         canvas { display: block; position: absolute; top: 0; left: 0; z-index: 1; }
         
-        #ui-layer {
-            position: absolute; top: 30px; left: 30px; z-index: 10;
+        #ui {
+            position: absolute; top: 20px; left: 20px; z-index: 10;
             color: white; pointer-events: none;
         }
-        .panel { background: rgba(0,0,0,0.5); padding: 10px 20px; border-radius: 12px; backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.2); margin-bottom: 10px; }
-        .label { font-size: 12px; text-transform: uppercase; opacity: 0.8; margin-bottom: 5px; }
-        .value { font-size: 20px; font-weight: bold; color: #a2d2ff; }
-        #hint { position: absolute; bottom: 30px; width: 100%; text-align: center; color: rgba(255,255,255,0.8); font-size: 14px; z-index: 5; font-weight: bold; text-shadow: 0 1px 3px rgba(0,0,0,0.5);}
+        .status { background: rgba(0,0,0,0.6); padding: 12px 20px; border-radius: 8px; margin-bottom: 10px; border-left: 5px solid #00d4ff; }
+        #hint { position: absolute; bottom: 20px; width: 100%; text-align: center; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.8); z-index: 5; font-size: 16px; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <video id="webcam" autoplay playsinline></video>
     
-    <div id="ui-layer">
-        <div class="panel">
-            <div class="label">TAY 1: CHỌN CHỮ (TỨC THÌ)</div>
-            <div id="word-val" class="value">Đang chờ ngón tay...</div>
+    <div id="ui">
+        <div class="status">
+            <small>TAY 1 (CHỌN):</small>
+            <div id="word-val" style="font-size: 24px; font-weight: bold;">ĐANG CHỜ...</div>
         </div>
-        <div class="panel">
-            <div class="label">TAY 2: HIỆU ỨNG</div>
-            <div id="effect-val" class="value">Chưa kích hoạt</div>
+        <div class="status">
+            <small>TAY 2 (HIỆU ỨNG):</small>
+            <div id="effect-val" style="font-size: 18px;">CHƯA CÓ TAY 2</div>
         </div>
     </div>
 
-    <div id="hint">TAY 1: GIƠ 1-3 NGÓN ĐỂ HIỆN CHỮ NGAY | TAY 2: MỞ/NẮM ĐỂ CHƠI VỚI HẠT</div>
+    <div id="hint">GIƠ 1, 2, HOẶC 3 NGÓN TAY ĐỂ HIỆN CHỮ NGAY</div>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
@@ -46,18 +44,17 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- CẤU HÌNH ---
         const WORDS = ["Hello", "Thuý Lâm", "t là trùm trường :))"];
-        const MAX_PARTICLES = 8000;
+        const MAX_PTS = 8000;
         
-        let currentWordIndex = -1;
-        let isInteracting = false; // Có tay 2 hay không
-        let isFist = false;        // Tay 2 nắm hay mở
-        let actionHandPos = new THREE.Vector3();
+        let currentIdx = -1;
+        let isActive2 = false;
+        let isFist2 = false;
+        let hand2Pos = new THREE.Vector3();
 
-        // --- THREE.JS SETUP ---
+        // --- THREE.JS ---
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 2000);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 1, 2000);
         camera.position.z = 500;
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -66,97 +63,93 @@
 
         const particles = [];
         const geo = new THREE.BufferGeometry();
-        // Tăng opacity lên 1.0 để hạt rõ hơn trên nền cam sáng
+        // Tăng kích thước hạt (size: 4) để nhìn rõ trên nền trắng
         const mat = new THREE.PointsMaterial({
-            size: 3.5, vertexColors: true, transparent: true, opacity: 1.0,
-            blending: THREE.AdditiveBlending, depthTest: false
+            size: 4, vertexColors: true, transparent: true, opacity: 0.9,
+            blending: THREE.NormalBlending, depthTest: false
         });
 
-        for (let i = 0; i < MAX_PARTICLES; i++) {
-            // Khởi tạo hạt ẩn đi
+        for (let i = 0; i < MAX_PTS; i++) {
             particles.push({
-                curr: new THREE.Vector3(0, -5000, 0), 
-                dest: new THREE.Vector3(0, -5000, 0),
+                curr: new THREE.Vector3(0, 0, -2000), // Ban đầu ẩn sau camera
+                dest: new THREE.Vector3(0, 0, -2000),
                 vel: new THREE.Vector3(),
                 acc: new THREE.Vector3(),
-                color: new THREE.Color()
+                color: new THREE.Color(0xffffff)
             });
         }
-        const pointsMesh = new THREE.Points(geo, mat);
-        scene.add(pointsMesh);
+        const mesh = new THREE.Points(geo, mat);
+        scene.add(mesh);
 
-        // --- SAMPLING CHỮ ---
-        function sampleText(text) {
+        // --- LẤY TỌA ĐỘ CHỮ ---
+        function getPoints(text) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            canvas.width = 1200; canvas.height = 400;
+            canvas.width = 1000; canvas.height = 300;
             ctx.fillStyle = 'white';
-            ctx.font = '900 100px Arial';
+            ctx.font = 'bold 120px Arial';
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText(text, 600, 200);
+            ctx.fillText(text, 500, 150);
             
-            const data = ctx.getImageData(0, 0, 1200, 400).data;
+            const data = ctx.getImageData(0, 0, 1000, 300).data;
             const pts = [];
-            for (let y = 0; y < 400; y += 4) {
-                for (let x = 0; x < 1200; x += 4) {
-                    if (data[(x + y * 1200) * 4] > 128) pts.push({ x: x - 600, y: -(y - 200) });
+            for (let y = 0; y < 300; y += 4) {
+                for (let x = 0; x < 1000; x += 4) {
+                    if (data[(x + y * 1000) * 4] > 128) {
+                        pts.push({ x: (x - 500) * 1.2, y: -(y - 150) * 1.2 });
+                    }
                 }
             }
             return pts;
         }
 
-        // --- CẬP NHẬT LOGIC ĐỂ HIỂN THỊ TỨC THÌ ---
-        function setWord(index) {
-            if (index === currentWordIndex) return;
-            currentWordIndex = index;
-            const targetData = sampleText(WORDS[index]);
-            const color = new THREE.Color().setHSL(Math.random(), 0.4, 0.6); // Màu đậm hơn chút cho dễ nhìn
+        function triggerWord(index) {
+            if (index === currentIdx) return;
+            currentIdx = index;
+            const targetData = getPoints(WORDS[index]);
+            const newColor = new THREE.Color().setHSL(Math.random(), 0.7, 0.5);
 
             particles.forEach((p, i) => {
                 if (i < targetData.length) {
-                    // Đặt đích đến mới
                     p.dest.set(targetData[i].x, targetData[i].y, 0);
-                    // QUAN TRỌNG: Nhảy ngay lập tức đến vị trí mới
+                    // HIỆN NGAY LẬP TỨC: Gán curr = dest ngay
                     p.curr.copy(p.dest);
-                    // Reset vận tốc để nó đứng yên ngay
-                    p.vel.set(0,0,0);
-                    p.acc.set(0,0,0);
+                    p.vel.set(0, 0, 0);
                 } else {
-                    // Hạt thừa thì ẩn đi ngay lập tức
-                    p.dest.set(0, -5000, 0);
-                    p.curr.set(0, -5000, 0);
+                    // Hạt thừa cho bay ra xa
+                    p.dest.set(0, 0, -2000);
+                    p.curr.set(0, 0, -2000);
                 }
-                p.color.copy(color);
+                p.color.copy(newColor);
             });
             document.getElementById('word-val').innerText = WORDS[index];
         }
 
-        // --- MEDIA PIPE LOGIC ---
+        // --- AI NHẬN DIỆN ---
         function onResults(results) {
-            const handsData = results.multiHandLandmarks;
-            
-            if (handsData && handsData.length > 0) {
-                // --- TAY 1: MASTER (CHỌN CHỮ) ---
-                const hand1 = handsData[0];
-                const fingers = [8, 12, 16].filter(i => hand1[i].y < hand1[i-2].y).length;
-                if (fingers >= 1 && fingers <= 3) setWord(fingers - 1);
+            const hands = results.multiHandLandmarks;
+            if (hands && hands.length > 0) {
+                // TAY 1: LUÔN ƯU TIÊN TAY ĐẦU TIÊN
+                const h1 = hands[0];
+                // Đếm ngón tay đơn giản (ngón trỏ, giữa, áp út)
+                const f1 = [8, 12, 16].filter(i => h1[i].y < h1[i-2].y).length;
+                if (f1 >= 1 && f1 <= 3) triggerWord(f1 - 1);
 
-                // --- TAY 2: ACTIVATOR (HIỆU ỨNG) ---
-                if (handsData.length > 1) {
-                    isInteracting = true;
-                    const hand2 = handsData[1];
-                    actionHandPos.set((1 - hand2[9].x - 0.5) * 1200, -(hand2[9].y - 0.5) * 800, 0);
+                // TAY 2: KÍCH HOẠT HIỆU ỨNG
+                if (hands.length > 1) {
+                    isActive2 = true;
+                    const h2 = hands[1];
+                    hand2Pos.set((1 - h2[9].x - 0.5) * 1000, -(h2[9].y - 0.5) * 600, 0);
                     
-                    // Kiểm tra nắm tay (Fist) cho tay 2
-                    const d = Math.hypot(hand2[8].x - hand2[0].x, hand2[8].y - hand2[0].y);
-                    isFist = d < 0.2;
-                    document.getElementById('effect-val').innerText = isFist ? "ĐANG TỤ (SIẾT)" : "ĐANG TAN (XOÁY)";
+                    const dist = Math.hypot(h2[8].x - h2[0].x, h2[8].y - h2[0].y);
+                    isFist2 = dist < 0.2;
+                    document.getElementById('effect-val').innerText = isFist2 ? "SIẾT CHẶT (NẮM)" : "TƯƠNG TÁC (MỞ)";
                 } else {
-                    isInteracting = false;
-                    document.getElementById('effect-val').innerText = "Chưa kích hoạt";
+                    isActive2 = false;
+                    document.getElementById('effect-val').innerText = "CHƯA CÓ TAY 2";
                 }
             } else {
-                isInteracting = false;
+                isActive2 = false;
             }
         }
 
@@ -165,52 +158,47 @@
         handsAI.onResults(onResults);
 
         const video = document.getElementById('webcam');
-        const cam = new Camera(video, {
+        const cameraUtils = new Camera(video, {
             onFrame: async () => { await handsAI.send({ image: video }); },
             width: 1280, height: 720
         });
-        cam.start();
+        cameraUtils.start();
 
-        // --- ANIMATION LOOP ---
+        // --- VÒNG LẶP HIỂN THỊ ---
         function animate() {
             requestAnimationFrame(animate);
             const time = Date.now() * 0.001;
-            const posArr = new Float32Array(MAX_PARTICLES * 3);
-            const colArr = new Float32Array(MAX_PARTICLES * 3);
+            const posArr = new Float32Array(MAX_PTS * 3);
+            const colArr = new Float32Array(MAX_PTS * 3);
 
             particles.forEach((p, i) => {
-                // CHỈ KHI CÓ TAY 2 THÌ MỚI ÁP DỤNG VẬT LÝ
-                if (isInteracting) {
-                    let force = isFist ? 0.2 : 0.02; // Nắm = hút cực mạnh, Mở = bay nhẹ
-                    
+                // Chỉ áp dụng vật lý hạt khi có TAY 2
+                if (isActive2) {
+                    let force = isFist2 ? 0.2 : 0.03;
                     p.acc.x += (p.dest.x - p.curr.x) * force;
                     p.acc.y += (p.dest.y - p.curr.y) * force;
 
-                    if (!isFist) {
-                        // Hiệu ứng xoáy và đẩy khi tay 2 mở
-                        const d = p.curr.distanceTo(actionHandPos);
-                        if (d < 250) {
-                            const f = (250 - d) / 250;
-                            p.acc.x += Math.cos(time + i) * f * 12;
-                            p.acc.y += Math.sin(time + i) * f * 12;
-                            p.acc.x += (p.curr.x - actionHandPos.x) * f * 0.08;
+                    if (!isFist2) {
+                        const d = p.curr.distanceTo(hand2Pos);
+                        if (d < 200) {
+                            const pct = (200 - d) / 200;
+                            p.acc.x += Math.cos(time * 5 + i) * pct * 10;
+                            p.acc.y += Math.sin(time * 5 + i) * pct * 10;
                         }
                     }
                     p.vel.add(p.acc);
                     p.curr.add(p.vel);
-                    p.vel.multiplyScalar(0.80); // Ma sát
+                    p.vel.multiplyScalar(0.8);
                     p.acc.set(0, 0, 0);
-                } 
-                // NẾU KHÔNG CÓ TAY 2: Hạt đứng yên tại chỗ (p.curr đã được set trong setWord)
+                } else {
+                    // Nếu không có tay 2, hạt luôn nằm im ở vị trí chữ
+                    p.curr.lerp(p.dest, 0.2);
+                }
 
                 posArr[i*3] = p.curr.x;
                 posArr[i*3+1] = p.curr.y;
                 posArr[i*3+2] = p.curr.z;
 
-                // Màu sắc lấp lánh nhẹ
-                const hue = (time * 0.05 + i * 0.0001) % 1;
-                const saturation = isInteracting ? 0.6 : 0.4; // Tương tác thì màu rực hơn
-                p.color.setHSL(hue, saturation, 0.6);
                 colArr[i*3] = p.color.r;
                 colArr[i*3+1] = p.color.g;
                 colArr[i*3+2] = p.color.b;
