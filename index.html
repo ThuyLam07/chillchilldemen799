@@ -3,36 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Particle Text - Hand Gestures</title>
+    <title>Magical Particle Text - Hand Control</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
-        #bg-video {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            object-fit: cover; z-index: -1; transform: scaleX(-1); filter: brightness(0.4);
-        }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; }
+        #webcam { position: fixed; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: -1; transform: scaleX(-1); filter: brightness(0.3) contrast(1.2); }
         canvas { display: block; position: absolute; top: 0; left: 0; }
-        
-        #instruction {
-            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            color: rgba(255,255,255,0.6); font-size: 14px; text-align: center;
-            pointer-events: none; line-height: 1.6;
-        }
-        #current-word-indicator {
-            position: absolute; top: 30px; right: 30px; color: white;
-            font-size: 12px; opacity: 0.5; letter-spacing: 2px;
-        }
+        #ui { position: absolute; top: 20px; left: 20px; color: rgba(255,255,255,0.7); pointer-events: none; }
+        #status-bar { position: absolute; bottom: 20px; width: 100%; text-align: center; color: white; font-weight: 300; letter-spacing: 1px; opacity: 0.6; }
     </style>
 </head>
 <body>
 
-    <video id="webcam" playsinline style="display:none;"></video>
-    <video id="bg-video" playsinline></video>
+    <video id="webcam" autoplay playsinline></video>
     
-    <div id="current-word-indicator">MODE: INTERACTIVE PARTICLES</div>
-    <div id="instruction">
-        CHẠM TAY để làm tan rã chữ <br> 
-        LƯỚT NHANH SANG TRÁI/PHẢI để đổi nội dung
+    <div id="ui">
+        <div id="gesture-info">Chế độ: Đang chờ tay...</div>
+        <div id="hand-state">Trạng thái: Tự do</div>
     </div>
+    <div id="status-bar">1 ngón: Hello | 2 ngón: Thuý Lâm | 3 ngón: t là trùm trường :)) | Nắm tay: Siết | Mở tay: Tan</div>
 
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
@@ -43,187 +31,219 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // --- CẤU HÌNH ---
-        const words = ["Hello", "Demen799", "Trùm trường", ":))"];
-        let currentWordIndex = 0;
-        const softColors = [0x95d5b2, 0xa2d2ff, 0xefc3e6, 0xfdf0d5]; // Màu Pastel nhạt
+        // --- CẤU HÌNH HỆ THỐNG ---
+        const CONFIG = {
+            particleCount: 7000,
+            words: ["Hello", "Thuý Lâm", "t là trùm trường :))"],
+            colors: [0xade8f4, 0xffb7ff, 0x90e0ef],
+            interactionRadius: 100,
+            springStrength: 0.04,
+            friction: 0.88
+        };
+
+        let currentWordIndex = -1;
+        let isFist = false;
+        let particles = [];
+        let handTarget = new THREE.Vector3(-9999, 0, 0);
+        let secondaryHand = new THREE.Vector3(-9999, 0, 0);
 
         // --- THREE.JS SETUP ---
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.z = 500;
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 2000);
+        camera.position.z = 600;
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // --- PARTICLE LOGIC ---
-        let particles = [];
-        const particleGeometry = new THREE.BufferGeometry();
-        const texture = new THREE.TextureLoader().load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/sprites/disc.png');
-        const particleMaterial = new THREE.PointsMaterial({
-            size: 4,
+        const geo = new THREE.BufferGeometry();
+        const mat = new THREE.PointsMaterial({
+            size: 3.5,
             vertexColors: true,
             transparent: true,
-            opacity: 0.8,
-            map: texture,
+            opacity: 0.7,
             blending: THREE.AdditiveBlending,
-            depthTest: false
+            sizeAttenuation: true
         });
 
-        const pointsMesh = new THREE.Points(particleGeometry, particleMaterial);
-        scene.add(pointsMesh);
+        const points = new THREE.Points(geo, mat);
+        scene.add(points);
 
-        // Hàm tạo tọa độ từ chữ (Canvas Sampling)
-        function createTextData(text) {
+        // --- LOGIC TẠO CHỮ ---
+        function getTextImageData(text) {
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            canvas.width = 1000;
-            canvas.height = 300;
-            
+            canvas.width = 1200;
+            canvas.height = 400;
             ctx.fillStyle = 'white';
-            ctx.font = '900 120px Arial';
+            ctx.font = '900 100px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText(text, 500, 150);
-
-            const imageData = ctx.getImageData(0, 0, 1000, 300).data;
-            const newPositions = [];
+            ctx.fillText(text, 600, 200);
             
-            // Lấy mẫu các pixel có màu
-            for (let y = 0; y < 300; y += 4) {
-                for (let x = 0; x < 1000; x += 4) {
-                    const index = (x + y * 1000) * 4;
-                    if (imageData[index] > 128) {
-                        newPositions.push({
-                            x: x - 500,
-                            y: -(y - 150),
-                            z: 0
-                        });
+            const data = ctx.getImageData(0, 0, 1200, 400).data;
+            const coords = [];
+            for (let y = 0; y < 400; y += 4) {
+                for (let x = 0; x < 1200; x += 4) {
+                    if (data[(x + y * 1200) * 4] > 128) {
+                        coords.push({ x: x - 600, y: -(y - 200) });
                     }
                 }
             }
-            return newPositions;
+            return coords;
         }
 
-        function initParticles(wordIndex) {
-            const data = createTextData(words[wordIndex]);
-            const color = new THREE.Color(softColors[wordIndex]);
-            
-            particles = data.map(pos => ({
-                pos: new THREE.Vector3(pos.x, pos.y, pos.z),
-                dest: new THREE.Vector3(pos.x, pos.y, pos.z),
+        // Khởi tạo hạt ban đầu (Phân tán)
+        for (let i = 0; i < CONFIG.particleCount; i++) {
+            particles.push({
+                pos: new THREE.Vector3((Math.random()-0.5)*1000, (Math.random()-0.5)*1000, (Math.random()-0.5)*400),
+                dest: new THREE.Vector3(0, 0, 0),
                 vel: new THREE.Vector3(),
                 acc: new THREE.Vector3(),
-                color: color.clone()
-            }));
-
-            updateGeometry();
-        }
-
-        function updateGeometry() {
-            const posArr = new Float32Array(particles.length * 3);
-            const colorArr = new Float32Array(particles.length * 3);
-            particles.forEach((p, i) => {
-                posArr[i * 3] = p.pos.x;
-                posArr[i * 3 + 1] = p.pos.y;
-                posArr[i * 3 + 2] = p.pos.z;
-                colorArr[i * 3] = p.color.r;
-                colorArr[i * 3 + 1] = p.color.g;
-                colorArr[i * 3 + 2] = p.color.b;
+                color: new THREE.Color(),
+                active: false
             });
-            particleGeometry.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
-            particleGeometry.setAttribute('color', new THREE.BufferAttribute(colorArr, 3));
         }
 
-        // --- HAND TRACKING & INTERACTION ---
-        const handPos = new THREE.Vector3(-999, -999, 0);
-        let prevHandX = 0;
-        let swipeThreshold = 0.05;
+        function setWord(index) {
+            if (index === currentWordIndex) return;
+            currentWordIndex = index;
+            const data = getTextImageData(CONFIG.words[index]);
+            const colorBase = new THREE.Color().setHSL(Math.random(), 0.5, 0.7);
 
+            particles.forEach((p, i) => {
+                if (i < data.length) {
+                    p.dest.set(data[i].x, data[i].y, 0);
+                    p.active = true;
+                } else {
+                    p.active = false; // Các hạt thừa sẽ bay tự do
+                    p.dest.set((Math.random()-0.5)*1500, (Math.random()-0.5)*1000, -200);
+                }
+                p.color.copy(colorBase);
+            });
+            document.getElementById('gesture-info').innerText = `Chế độ: ${CONFIG.words[index]}`;
+        }
+
+        // --- MEDIA PIPE HANDS ---
         function onResults(results) {
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                const landmark = results.multiHandLandmarks[0][8]; // Đầu ngón trỏ
+                // Tay 1: Điều khiển chính (Chữ + Trạng thái)
+                const hand1 = results.multiHandLandmarks[0];
+                updateHandLogic(hand1);
                 
-                // Chuyển tọa độ MediaPipe sang Three.js (Gương)
-                const targetX = (1 - landmark.x - 0.5) * 1200;
-                const targetY = -(landmark.y - 0.5) * 600;
-                
-                handPos.set(targetX, targetY, 20);
-
-                // Detection Swipe (Lướt)
-                const deltaX = landmark.x - prevHandX;
-                if (Math.abs(deltaX) > swipeThreshold) {
-                    if (deltaX > 0.1) changeWord(-1); // Lướt trái
-                    if (deltaX < -0.1) changeWord(1); // Lướt phải
+                // Tay 2 (nếu có): Điều khiển vật lý (Đẩy/Kéo)
+                if (results.multiHandLandmarks.length > 1) {
+                    const hand2 = results.multiHandLandmarks[1];
+                    secondaryHand.set((1 - hand2[9].x - 0.5) * 1200, -(hand2[9].y - 0.5) * 800, 50);
+                } else {
+                    secondaryHand.set(-9999, 0, 0);
                 }
-                prevHandX = landmark.x;
             } else {
-                handPos.set(-9999, -9999, 0);
+                handTarget.set(-9999, 0, 0);
+                secondaryHand.set(-9999, 0, 0);
             }
         }
 
-        function changeWord(dir) {
-            currentWordIndex = (currentWordIndex + dir + words.length) % words.length;
-            initParticles(currentWordIndex);
+        function updateHandLogic(lm) {
+            // 1. Chuyển tọa độ
+            handTarget.set((1 - lm[9].x - 0.5) * 1200, -(lm[9].y - 0.5) * 800, 50);
+
+            // 2. Đếm ngón tay (Trỏ, Giữa, Áp út)
+            const countExtended = [8, 12, 16].filter(i => lm[i].y < lm[i-2].y).length;
+            if (countExtended === 1) setWord(0);
+            else if (countExtended === 2) setWord(1);
+            else if (countExtended === 3) setWord(2);
+
+            // 3. Nhận diện Nắm tay (Fist)
+            const distTipToPalm = Math.hypot(lm[8].x - lm[0].x, lm[8].y - lm[0].y);
+            isFist = distTipToPalm < 0.15;
+            document.getElementById('hand-state').innerText = isFist ? "Trạng thái: SIẾT CHẶT" : "Trạng thái: TỰ DO";
         }
 
-        const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+        const hands = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+        hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
         hands.onResults(onResults);
 
-        const videoElement = document.getElementById('webcam');
-        const bgVideo = document.getElementById('bg-video');
-        const cam = new Camera(videoElement, {
-            onFrame: async () => { 
-                await hands.send({ image: videoElement }); 
-                if (bgVideo.srcObject !== videoElement.srcObject) bgVideo.srcObject = videoElement.srcObject;
-                bgVideo.play();
-            },
+        const cameraPipe = new Camera(document.getElementById('webcam'), {
+            onFrame: async () => { await hands.send({ image: document.getElementById('webcam') }); },
             width: 1280, height: 720
         });
-        cam.start();
+        cameraPipe.start();
 
         // --- ANIMATION LOOP ---
         function animate() {
             requestAnimationFrame(animate);
+            const time = Date.now() * 0.001;
 
-            const mouseRadius = 60;
-            const mouseStrength = 7;
+            const positions = new Float32Array(CONFIG.particleCount * 3);
+            const colors = new Float32Array(CONFIG.particleCount * 3);
 
-            for (let i = 0; i < particles.length; i++) {
-                const p = particles[i];
-                
-                // Khoảng cách tới bàn tay
-                const dx = handPos.x - p.pos.x;
-                const dy = handPos.y - p.pos.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                
-                // Lực đẩy khi chạm tay
-                if (dist < mouseRadius) {
-                    const angle = Math.atan2(dy, dx);
-                    const force = (mouseRadius - dist) / mouseRadius;
-                    p.acc.x -= Math.cos(angle) * force * mouseStrength;
-                    p.acc.y -= Math.sin(angle) * force * mouseStrength;
+            particles.forEach((p, i) => {
+                // 1. Lực hồi quy (Spring to destination)
+                let strength = isFist ? 0.15 : CONFIG.springStrength;
+                if (currentWordIndex === -1) strength = 0.001; // Trạng thái chờ
+
+                p.acc.x += (p.dest.x - p.pos.x) * strength;
+                p.acc.y += (p.dest.y - p.pos.y) * strength;
+                p.acc.z += (p.dest.z - p.pos.z) * strength;
+
+                // 2. Tương tác tay chính (Chữ tụ quanh tay)
+                if (handTarget.x !== -9999) {
+                    const d1 = p.pos.distanceTo(handTarget);
+                    if (d1 < 150) {
+                        const f = (150 - d1) / 150;
+                        p.acc.x += (handTarget.x - p.pos.x) * f * 0.2;
+                        p.acc.y += (handTarget.y - p.pos.y) * f * 0.2;
+                    }
                 }
 
-                // Lực đàn hồi kéo về vị trí cũ (Home force)
-                p.acc.x += (p.dest.x - p.pos.x) * 0.05;
-                p.acc.y += (p.dest.y - p.pos.y) * 0.05;
+                // 3. Tương tác tay phụ (Lực xoáy/đẩy)
+                if (secondaryHand.x !== -9999) {
+                    const d2 = p.pos.distanceTo(secondaryHand);
+                    if (d2 < 200) {
+                        const f = (200 - d2) / 200;
+                        // Hiệu ứng xoáy
+                        p.acc.x += Math.sin(time + i) * f * 10;
+                        p.acc.y += Math.cos(time + i) * f * 10;
+                        // Đẩy nhẹ
+                        p.acc.x -= (secondaryHand.x - p.pos.x) * f * 0.1;
+                    }
+                }
 
-                // Vật lý cơ bản
+                // 4. Noise tự do (Cảm giác bay bổng)
+                p.acc.x += Math.sin(time * 0.5 + i) * 0.2;
+                p.acc.y += Math.cos(time * 0.5 + i) * 0.2;
+
+                // Cập nhật vật lý
                 p.vel.add(p.acc);
                 p.pos.add(p.vel);
-                p.vel.multiplyScalar(0.9); // Ma sát
+                p.vel.multiplyScalar(CONFIG.friction);
                 p.acc.set(0, 0, 0);
-            }
 
-            updateGeometry();
+                // Gán vào Buffer
+                positions[i*3] = p.pos.x;
+                positions[i*3+1] = p.pos.y;
+                positions[i*3+2] = p.pos.z;
+
+                // Màu sắc chuyển động nhẹ
+                const h = (time * 0.05 + i * 0.0001) % 1;
+                p.color.setHSL(h, 0.4, 0.7);
+                colors[i*3] = p.color.r;
+                colors[i*3+1] = p.color.g;
+                colors[i*3+2] = p.color.b;
+            });
+
+            geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+            geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+            geo.attributes.position.needsUpdate = true;
+            
+            // Xoay nhẹ camera tạo chiều sâu
+            camera.position.x += (handTarget.x * 0.1 - camera.position.x) * 0.05;
+            camera.lookAt(0,0,0);
+
             renderer.render(scene, camera);
         }
 
-        // Khởi tạo lần đầu
-        initParticles(0);
         animate();
 
         window.addEventListener('resize', () => {
