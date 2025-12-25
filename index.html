@@ -6,10 +6,9 @@
     <title>Fixed Instant Text - Dual Hand</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; }
-        /* Camera màu trắng tự nhiên */
         #webcam { position: fixed; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; transform: scaleX(-1); }
         canvas { display: block; position: absolute; top: 0; left: 0; z-index: 1; }
-        
+       
         #ui {
             position: absolute; top: 20px; left: 20px; z-index: 10;
             color: white; pointer-events: none;
@@ -19,9 +18,8 @@
     </style>
 </head>
 <body>
-
-    <video id="webcam" autoplay playsinline></video>
-    
+    <video id="webcam" autoplay playsinline muted></video>
+   
     <div id="ui">
         <div class="status">
             <small>TAY 1 (CHỌN):</small>
@@ -32,21 +30,17 @@
             <div id="effect-val" style="font-size: 18px;">CHƯA CÓ TAY 2</div>
         </div>
     </div>
-
     <div id="hint">GIƠ 1, 2, HOẶC 3 NGÓN TAY ĐỂ HIỆN CHỮ NGAY</div>
-
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script type="importmap">
         { "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js" } }
     </script>
-
     <script type="module">
         import * as THREE from 'three';
-
         const WORDS = ["Hello", "Thuý Lâm", "t là trùm trường :))"];
         const MAX_PTS = 8000;
-        
+       
         let currentIdx = -1;
         let isActive2 = false;
         let isFist2 = false;
@@ -56,22 +50,25 @@
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 1, 2000);
         camera.position.z = 500;
-
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x000000, 0); // Quan trọng: canvas trong suốt
         document.body.appendChild(renderer.domElement);
 
         const particles = [];
         const geo = new THREE.BufferGeometry();
-        // Tăng kích thước hạt (size: 4) để nhìn rõ trên nền trắng
         const mat = new THREE.PointsMaterial({
-            size: 4, vertexColors: true, transparent: true, opacity: 0.9,
-            blending: THREE.NormalBlending, depthTest: false
+            size: 6, // Tăng lên 6 để dễ thấy hơn trên mọi thiết bị
+            vertexColors: true, 
+            transparent: true, 
+            opacity: 0.9,
+            blending: THREE.NormalBlending, 
+            depthTest: false
         });
 
         for (let i = 0; i < MAX_PTS; i++) {
             particles.push({
-                curr: new THREE.Vector3(0, 0, -2000), // Ban đầu ẩn sau camera
+                curr: new THREE.Vector3(0, 0, -2000),
                 dest: new THREE.Vector3(0, 0, -2000),
                 vel: new THREE.Vector3(),
                 acc: new THREE.Vector3(),
@@ -90,7 +87,7 @@
             ctx.font = 'bold 120px Arial';
             ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
             ctx.fillText(text, 500, 150);
-            
+           
             const data = ctx.getImageData(0, 0, 1000, 300).data;
             const pts = [];
             for (let y = 0; y < 300; y += 4) {
@@ -108,15 +105,12 @@
             currentIdx = index;
             const targetData = getPoints(WORDS[index]);
             const newColor = new THREE.Color().setHSL(Math.random(), 0.7, 0.5);
-
             particles.forEach((p, i) => {
                 if (i < targetData.length) {
                     p.dest.set(targetData[i].x, targetData[i].y, 0);
-                    // HIỆN NGAY LẬP TỨC: Gán curr = dest ngay
-                    p.curr.copy(p.dest);
+                    p.curr.copy(p.dest); // Hiện ngay lập tức
                     p.vel.set(0, 0, 0);
                 } else {
-                    // Hạt thừa cho bay ra xa
                     p.dest.set(0, 0, -2000);
                     p.curr.set(0, 0, -2000);
                 }
@@ -125,22 +119,25 @@
             document.getElementById('word-val').innerText = WORDS[index];
         }
 
+        // Hiện chữ đầu tiên khi load (tùy chọn, hoặc để ĐANG CHỜ)
+        triggerWord(0);
+
         // --- AI NHẬN DIỆN ---
         function onResults(results) {
             const hands = results.multiHandLandmarks;
             if (hands && hands.length > 0) {
-                // TAY 1: LUÔN ƯU TIÊN TAY ĐẦU TIÊN
+                // TAY 1: Tay đầu tiên detect được
                 const h1 = hands[0];
-                // Đếm ngón tay đơn giản (ngón trỏ, giữa, áp út)
-                const f1 = [8, 12, 16].filter(i => h1[i].y < h1[i-2].y).length;
+                // Đếm ngón mở (trỏ, giữa, áp út)
+                const f1 = [8, 12, 16].filter(i => h1[i].y < h1[i-2].y).length; // ngón mở nếu tip thấp hơn (y nhỏ hơn)
                 if (f1 >= 1 && f1 <= 3) triggerWord(f1 - 1);
 
-                // TAY 2: KÍCH HOẠT HIỆU ỨNG
+                // TAY 2
                 if (hands.length > 1) {
                     isActive2 = true;
                     const h2 = hands[1];
                     hand2Pos.set((1 - h2[9].x - 0.5) * 1000, -(h2[9].y - 0.5) * 600, 0);
-                    
+                   
                     const dist = Math.hypot(h2[8].x - h2[0].x, h2[8].y - h2[0].y);
                     isFist2 = dist < 0.2;
                     document.getElementById('effect-val').innerText = isFist2 ? "SIẾT CHẶT (NẮM)" : "TƯƠNG TÁC (MỞ)";
@@ -150,21 +147,28 @@
                 }
             } else {
                 isActive2 = false;
+                document.getElementById('effect-val').innerText = "CHƯA CÓ TAY 2";
             }
         }
 
         const handsAI = new Hands({ locateFile: (f) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
-        handsAI.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+        handsAI.setOptions({ 
+            maxNumHands: 2, 
+            modelComplexity: 1, 
+            minDetectionConfidence: 0.6, // Giảm nhẹ để dễ detect hơn
+            minTrackingConfidence: 0.6 
+        });
         handsAI.onResults(onResults);
 
         const video = document.getElementById('webcam');
         const cameraUtils = new Camera(video, {
             onFrame: async () => { await handsAI.send({ image: video }); },
-            width: 1280, height: 720
+            width: 1280, 
+            height: 720
         });
         cameraUtils.start();
 
-        // --- VÒNG LẶP HIỂN THỊ ---
+        // --- ANIMATE ---
         function animate() {
             requestAnimationFrame(animate);
             const time = Date.now() * 0.001;
@@ -172,7 +176,6 @@
             const colArr = new Float32Array(MAX_PTS * 3);
 
             particles.forEach((p, i) => {
-                // Chỉ áp dụng vật lý hạt khi có TAY 2
                 if (isActive2) {
                     let force = isFist2 ? 0.2 : 0.03;
                     p.acc.x += (p.dest.x - p.curr.x) * force;
@@ -191,14 +194,12 @@
                     p.vel.multiplyScalar(0.8);
                     p.acc.set(0, 0, 0);
                 } else {
-                    // Nếu không có tay 2, hạt luôn nằm im ở vị trí chữ
                     p.curr.lerp(p.dest, 0.2);
                 }
 
                 posArr[i*3] = p.curr.x;
                 posArr[i*3+1] = p.curr.y;
                 posArr[i*3+2] = p.curr.z;
-
                 colArr[i*3] = p.color.r;
                 colArr[i*3+1] = p.color.g;
                 colArr[i*3+2] = p.color.b;
@@ -207,10 +208,10 @@
             geo.setAttribute('position', new THREE.BufferAttribute(posArr, 3));
             geo.setAttribute('color', new THREE.BufferAttribute(colArr, 3));
             geo.attributes.position.needsUpdate = true;
+            geo.attributes.color.needsUpdate = true;
 
             renderer.render(scene, camera);
         }
-
         animate();
 
         window.addEventListener('resize', () => {
