@@ -45,8 +45,6 @@
         let isActiveLeft = false;
         let isFistLeft = false;
         let handLeftPos = new THREE.Vector3();
-        let rotationSpeed = 0; // Thêm xoay đặc sắc
-        let colorHue = 0; // Thêm thay đổi màu dần dần
         // --- THREE.JS ---
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 1, 2000);
@@ -64,7 +62,7 @@
             vertexColors: true,
             transparent: true,
             opacity: 0.9,
-            blending: THREE.AdditiveBlending, // Đổi blending để hạt sáng hơn, đặc sắc hơn
+            blending: THREE.NormalBlending,
             depthTest: false
         });
         for (let i = 0; i < MAX_PTS; i++) {
@@ -90,8 +88,8 @@
           
             const data = ctx.getImageData(0, 0, 1000, 300).data;
             const pts = [];
-            for (let y = 0; y < 300; y += 3) { // Giảm bước nhảy để nhiều điểm hơn, đặc sắc hơn
-                for (let x = 0; x < 1000; x += 3) {
+            for (let y = 0; y < 300; y += 4) {
+                for (let x = 0; x < 1000; x += 4) {
                     if (data[(x + y * 1000) * 4] > 128) {
                         pts.push({ x: (x - 500) * 1.2, y: -(y - 150) * 1.2 });
                     }
@@ -103,14 +101,15 @@
             if (index === currentIdx) return;
             currentIdx = index;
             const targetData = getPoints(WORDS[index]);
-            const newColor = new THREE.Color().setHSL(Math.random(), 0.8, 0.6); // Tăng saturation và lightness cho đặc sắc
+            const newColor = new THREE.Color().setHSL(Math.random(), 0.7, 0.5);
             particles.forEach((p, i) => {
                 if (i < targetData.length) {
                     p.dest.set(targetData[i].x, targetData[i].y, 0);
-                    // Không copy ngay, để lerp dần dần cho mượt mà
+                    p.curr.copy(p.dest); // Hiện ngay lập tức
                     p.vel.set(0, 0, 0);
                 } else {
                     p.dest.set(0, 0, -2000);
+                    p.curr.set(0, 0, -2000);
                 }
                 p.color.copy(newColor);
             });
@@ -174,34 +173,27 @@
             const time = Date.now() * 0.001;
             const posArr = new Float32Array(MAX_PTS * 3);
             const colArr = new Float32Array(MAX_PTS * 3);
-            colorHue = (colorHue + 0.001) % 1; // Thay đổi màu dần dần cho đặc sắc
+            const center = new THREE.Vector3(0, 0, 0);
             particles.forEach((p, i) => {
                 if (isActiveLeft) {
-                    let force = isFistLeft ? 0.3 : 0.05; // Tăng force cho mượt mà hơn
+                    let force = isFistLeft ? 0.2 : 0.03;
                     p.acc.x += (p.dest.x - p.curr.x) * force;
                     p.acc.y += (p.dest.y - p.curr.y) * force;
                     if (!isFistLeft) {
-                        const d = p.curr.distanceTo(handLeftPos);
-                        if (d < 250) { // Tăng phạm vi tương tác
-                            const pct = (250 - d) / 250;
-                            p.acc.x += Math.cos(time * 6 + i * 0.1) * pct * 15; // Tăng biên độ cho đặc sắc
-                            p.acc.y += Math.sin(time * 6 + i * 0.1) * pct * 15;
-                        }
+                        // Thêm lực đẩy ra khỏi center để tràn màn hình khi mở tay
+                        const dir = p.curr.clone().sub(center).normalize();
+                        p.acc.add(dir.multiplyScalar(5)); // Lực đẩy ra ngoài, điều chỉnh 5 để mạnh mẽ
+                        // Thêm chút random để phân ly tự nhiên
+                        p.acc.x += (Math.random() - 0.5) * 2;
+                        p.acc.y += (Math.random() - 0.5) * 2;
                     }
                     p.vel.add(p.acc);
                     p.curr.add(p.vel);
-                    p.vel.multiplyScalar(0.85); // Tăng damping cho mượt mà
+                    p.vel.multiplyScalar(0.8);
                     p.acc.set(0, 0, 0);
-                    rotationSpeed = isFistLeft ? 0.02 : 0.005; // Thêm xoay khi nắm
                 } else {
-                    p.curr.lerp(p.dest, 0.3); // Tăng lerp cho chuyển tiếp mượt mà
-                    rotationSpeed *= 0.95; // Giảm dần xoay khi không có tay trái
+                    p.curr.lerp(p.dest, 0.2);
                 }
-                // Thêm xoay đặc sắc
-                const rotMatrix = new THREE.Matrix4().makeRotationZ(rotationSpeed);
-                p.curr.applyMatrix4(rotMatrix);
-                // Thay đổi màu theo hue
-                p.color.setHSL(colorHue + i / MAX_PTS * 0.2, 0.8, 0.6);
                 posArr[i*3] = p.curr.x;
                 posArr[i*3+1] = p.curr.y;
                 posArr[i*3+2] = p.curr.z;
