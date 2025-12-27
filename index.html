@@ -86,9 +86,10 @@
         <p>Sử dụng camera để nhận diện cử chỉ tay:</p>
         <ul>
             <li>0 ngón (nắm tay): Hình trái tim</li>
-            <li>1 ngón: Chữ "HELLO"</li>
-            <li>2 ngón: Chữ "THUÝ LÂM"</li>
-            <li>3 ngón: Chữ "Yêu Các bạn nhiều lắm"</li>
+            <li>1 ngón: Chữ "BIẾT 100 ĐÀN"</li>
+            <li>2 ngón: Chữ "CHƠI 10 ĐÀN"</li>
+            <li>3 ngón: Chữ "THÍCH 1 ĐÀN"</li>
+            <li>4 ngón: Chữ "ĐÀN BÀ"</li>
             <li>5 ngón (mở tay): Bung ra, đổi màu</li>
         </ul>
     </div>
@@ -97,7 +98,7 @@
         let scene, camera, renderer;
         let particles, particlePositions, particleVelocities, particleColors;
         let targetPositions = []; // Vị trí mục tiêu
-        let currentState = 'default'; // Trạng thái: 'default', '0', '1', '2', '3', '5'
+        let currentState = 'default'; // Trạng thái: 'default', '0', '1', '2', '3', '4', '5'
         let baseColor = new THREE.Color(0xffffff); // Màu cơ bản từ color picker
         const numParticles = 5000; // Số lượng particles
         const transitionSpeed = 0.05; // Tốc độ lerp
@@ -200,11 +201,13 @@
             if (state === 'default') {
                 generateSpherePositions();
             } else if (state === '1') {
-                generateTextPositions('HELLO');
+                generateTextPositions('BIẾT 100 ĐÀN');
             } else if (state === '2') {
-                generateTextPositions('THUÝ LÂM');
+                generateTextPositions('CHƠI 10 ĐÀN');
             } else if (state === '3') {
-                generateTextPositions('Yêu Các bạn nhiều lắm');
+                generateTextPositions('THÍCH 1 ĐÀN');
+            } else if (state === '4') {
+                generateTextPositions('ĐÀN BÀ');
             } else if (state === '5') {
                 generateExplosionPositions();
             } else if (state === '0') {
@@ -245,7 +248,7 @@
             ctx.fillStyle = '#fff';
             ctx.textAlign = 'center'; // Căn giữa
             ctx.textBaseline = 'middle'; // Căn giữa theo chiều dọc
-            ctx.fillText(text, canvas.width / 2, canvas.height / 2); // Vẽ ở giữa, không upper vì đã chỉ định case
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2); // Vẽ ở giữa
 
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
             const points = [];
@@ -374,6 +377,7 @@
                 else if (fingerCount === 1) newState = '1';
                 else if (fingerCount === 2) newState = '2';
                 else if (fingerCount === 3) newState = '3';
+                else if (fingerCount === 4) newState = '4';
                 else if (fingerCount === 5) newState = '5';
 
                 if (newState !== currentState) {
