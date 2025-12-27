@@ -165,8 +165,8 @@
             // Cập nhật màu
             updateParticleColors();
 
-            // Xoay nhẹ
-            particles.rotation.y += 0.001;
+            // Không xoay để giữ thẳng hàng
+            // particles.rotation.y += 0.001; // Comment out để không xoay
 
             renderer.render(scene, camera);
         }
@@ -238,10 +238,10 @@
 
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
             const points = [];
-            for (let y = 0; y < canvas.height; y += 3) { // Sample thưa hơn
-                for (let x = 0; x < canvas.width; x += 3) {
+            for (let y = 0; y < canvas.height; y += 2) { // Giảm step để dày hơn
+                for (let x = 0; x < canvas.width; x += 2) {
                     if (imageData[(y * canvas.width + x) * 4] > 128) {
-                        points.push({ x: (x - canvas.width / 2) / 10, y: (canvas.height / 2 - y) / 10, z: (Math.random() - 0.5) * 2 });
+                        points.push({ x: (x - canvas.width / 2) / 10, y: (canvas.height / 2 - y) / 10, z: 0 }); // z=0 để thẳng
                     }
                 }
             }
@@ -258,26 +258,26 @@
             ctx.fillStyle = '#000';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 10;
+            ctx.lineWidth = 20; // Tăng lineWidth để dày hơn, dễ capture points hơn
             ctx.beginPath();
             ctx.arc(128, 128, 100, 0, Math.PI * 2);
             ctx.stroke();
             ctx.beginPath();
-            ctx.arc(90, 100, 10, 0, Math.PI * 2);
+            ctx.arc(90, 100, 20, 0, Math.PI * 2); // Tăng size mắt
             ctx.stroke();
             ctx.beginPath();
-            ctx.arc(166, 100, 10, 0, Math.PI * 2);
+            ctx.arc(166, 100, 20, 0, Math.PI * 2);
             ctx.stroke();
             ctx.beginPath();
-            ctx.arc(128, 160, 60, 0, Math.PI); // Miệng cười ngược vì coord y đảo
+            ctx.arc(128, 150, 70, 0, Math.PI); // Adjust vị trí miệng và radius để rõ hơn, 0 to PI cho nửa trên (cười vì center thấp)
             ctx.stroke();
 
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
             const points = [];
-            for (let y = 0; y < canvas.height; y += 3) {
-                for (let x = 0; x < canvas.width; x += 3) {
+            for (let y = 0; y < canvas.height; y += 2) { // Giảm step để dày hơn
+                for (let x = 0; x < canvas.width; x += 2) {
                     if (imageData[(y * canvas.width + x) * 4 + 3] > 0) {
-                        points.push({ x: (x - canvas.width / 2) / 5, y: (canvas.height / 2 - y) / 5, z: (Math.random() - 0.5) * 2 });
+                        points.push({ x: (x - canvas.width / 2) / 5, y: (canvas.height / 2 - y) / 5, z: 0 }); // z=0 để thẳng
                     }
                 }
             }
@@ -289,9 +289,9 @@
         function assignPointsToTargets(points) {
             for (let i = 0; i < numParticles; i++) {
                 const p = points[i % points.length];
-                targetPositions[i * 3] = p.x + (Math.random() - 0.5) * 0.5;
-                targetPositions[i * 3 + 1] = p.y + (Math.random() - 0.5) * 0.5;
-                targetPositions[i * 3 + 2] = p.z + (Math.random() - 0.5) * 0.5;
+                targetPositions[i * 3] = p.x + (Math.random() - 0.5) * 0.1; // Giảm noise để rõ nét hơn
+                targetPositions[i * 3 + 1] = p.y + (Math.random() - 0.5) * 0.1;
+                targetPositions[i * 3 + 2] = p.z;
             }
         }
 
