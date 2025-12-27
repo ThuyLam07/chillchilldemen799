@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hu Ứng Particles Với Nhận Diện Cử Chỉ Tay</title>
+    <title>Hiệu Ứng Particles Với Nhận Diện Cử Chỉ Tay</title>
     <style>
         body {
             margin: 0;
@@ -85,10 +85,10 @@
     <div id="instructions">
         <p>Sử dụng camera để nhận diện cử chỉ tay:</p>
         <ul>
-            <li>0 ngón (nắm tay): Co cụm</li>
+            <li>0 ngón (nắm tay): Hình trái tim</li>
             <li>1 ngón: Chữ "HELLO"</li>
-            <li>2 ngón: Chữ "THUÝ LÂM LÀ"</li>
-            <li>3 ngón: Chữ "TRÙM TRƯỜNG"</li>
+            <li>2 ngón: Chữ "THUÝ LÂM"</li>
+            <li>3 ngón: Chữ "Yêu Các bạn nhiều lắm"</li>
             <li>5 ngón (mở tay): Bung ra, đổi màu</li>
         </ul>
     </div>
@@ -202,13 +202,13 @@
             } else if (state === '1') {
                 generateTextPositions('HELLO');
             } else if (state === '2') {
-                generateTextPositions('THUÝ LÂM LÀ');
+                generateTextPositions('THUÝ LÂM');
             } else if (state === '3') {
-                generateTextPositions('TRÙM TRƯỜNG');
+                generateTextPositions('Yêu Các bạn nhiều lắm');
             } else if (state === '5') {
                 generateExplosionPositions();
             } else if (state === '0') {
-                generateClusterPositions();
+                generateHeartPositions();
             }
         }
 
@@ -237,8 +237,7 @@
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             let fontSize = 80;
             ctx.font = `bold ${fontSize}px Arial`;
-            let upperText = text.toUpperCase();
-            let textWidth = ctx.measureText(upperText).width;
+            let textWidth = ctx.measureText(text).width;
             if (textWidth > canvas.width - 100) {
                 fontSize = fontSize * (canvas.width - 100) / textWidth;
                 ctx.font = `bold ${fontSize}px Arial`;
@@ -246,7 +245,7 @@
             ctx.fillStyle = '#fff';
             ctx.textAlign = 'center'; // Căn giữa
             ctx.textBaseline = 'middle'; // Căn giữa theo chiều dọc
-            ctx.fillText(upperText, canvas.width / 2, canvas.height / 2); // Vẽ ở giữa và viết hoa
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2); // Vẽ ở giữa, không upper vì đã chỉ định case
 
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
             const points = [];
@@ -254,6 +253,47 @@
                 for (let x = 0; x < canvas.width; x += 2) {
                     if (imageData[(y * canvas.width + x) * 4] > 128) {
                         points.push({ x: (x - canvas.width / 2) / 10, y: (canvas.height / 2 - y) / 10, z: 0 }); // z=0 để thẳng
+                    }
+                }
+            }
+
+            assignPointsToTargets(points);
+        }
+
+        // Tạo positions cho hình trái tim sử dụng Canvas 2D
+        function generateHeartPositions() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#fff';
+
+            // Vẽ hình trái tim
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2 - 20; // Dịch lên một chút để cân đối
+            const scale = 1.5; // Tăng kích thước
+            ctx.save();
+            ctx.translate(centerX, centerY);
+            ctx.scale(scale, scale);
+            ctx.beginPath();
+            ctx.moveTo(0, -3);
+            ctx.bezierCurveTo(0, -7, -5, -15, -15, -15);
+            ctx.bezierCurveTo(-30, -15, -30, 10, -30, 10);
+            ctx.bezierCurveTo(-30, 30, -15, 45, 0, 60);
+            ctx.bezierCurveTo(15, 45, 30, 30, 30, 10);
+            ctx.bezierCurveTo(30, 10, 30, -15, 15, -15);
+            ctx.bezierCurveTo(5, -15, 0, -7, 0, -3);
+            ctx.fill();
+            ctx.restore();
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+            const points = [];
+            for (let y = 0; y < canvas.height; y += 2) {
+                for (let x = 0; x < canvas.width; x += 2) {
+                    if (imageData[(y * canvas.width + x) * 4] > 128) {
+                        points.push({ x: (x - canvas.width / 2) / 5, y: (canvas.height / 2 - y) / 5, z: 0 });
                     }
                 }
             }
@@ -279,15 +319,6 @@
                 targetPositions[i * 3] = dir.x * dist;
                 targetPositions[i * 3 + 1] = dir.y * dist;
                 targetPositions[i * 3 + 2] = dir.z * dist;
-            }
-        }
-
-        // Co cụm
-        function generateClusterPositions() {
-            for (let i = 0; i < numParticles; i++) {
-                targetPositions[i * 3] = (Math.random() - 0.5) * 5;
-                targetPositions[i * 3 + 1] = (Math.random() - 0.5) * 5;
-                targetPositions[i * 3 + 2] = (Math.random() - 0.5) * 5;
             }
         }
 
