@@ -86,8 +86,9 @@
         <p>Sử dụng camera để nhận diện cử chỉ tay:</p>
         <ul>
             <li>0 ngón (nắm tay): Co cụm</li>
-            <li>1 ngón: Chữ "Thuý Lâm"</li>
-            <li>2 ngón: Biểu tượng :)))</li>
+            <li>1 ngón: Chữ "hello"</li>
+            <li>2 ngón: Chữ "tao"</li>
+            <li>3 ngón: Chữ "trùm trường"</li>
             <li>5 ngón (mở tay): Bung ra, đổi màu</li>
         </ul>
     </div>
@@ -96,7 +97,7 @@
         let scene, camera, renderer;
         let particles, particlePositions, particleVelocities, particleColors;
         let targetPositions = []; // Vị trí mục tiêu
-        let currentState = 'default'; // Trạng thái: 'default', '0', '1', '2', '5'
+        let currentState = 'default'; // Trạng thái: 'default', '0', '1', '2', '3', '5'
         let baseColor = new THREE.Color(0xffffff); // Màu cơ bản từ color picker
         const numParticles = 5000; // Số lượng particles
         const transitionSpeed = 0.05; // Tốc độ lerp
@@ -199,9 +200,11 @@
             if (state === 'default') {
                 generateSpherePositions();
             } else if (state === '1') {
-                generateTextPositions('Thuý Lâm');
+                generateTextPositions('hello');
             } else if (state === '2') {
-                generateEmojiPositions();
+                generateTextPositions('tao');
+            } else if (state === '3') {
+                generateTextPositions('trùm trường');
             } else if (state === '5') {
                 generateExplosionPositions();
             } else if (state === '0') {
@@ -242,42 +245,6 @@
                 for (let x = 0; x < canvas.width; x += 2) {
                     if (imageData[(y * canvas.width + x) * 4] > 128) {
                         points.push({ x: (x - canvas.width / 2) / 10, y: (canvas.height / 2 - y) / 10, z: 0 }); // z=0 để thẳng
-                    }
-                }
-            }
-
-            assignPointsToTargets(points);
-        }
-
-        // Tạo positions cho emoji :))) sử dụng Canvas 2D
-        function generateEmojiPositions() {
-            const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 256;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#000';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.strokeStyle = '#fff';
-            ctx.lineWidth = 20; // Tăng lineWidth để dày hơn, dễ capture points hơn
-            ctx.beginPath();
-            ctx.arc(128, 128, 100, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(90, 100, 20, 0, Math.PI * 2); // Tăng size mắt
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(166, 100, 20, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(128, 150, 70, 0, Math.PI); // Adjust vị trí miệng và radius để rõ hơn, 0 to PI cho nửa trên (cười vì center thấp)
-            ctx.stroke();
-
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-            const points = [];
-            for (let y = 0; y < canvas.height; y += 2) { // Giảm step để dày hơn
-                for (let x = 0; x < canvas.width; x += 2) {
-                    if (imageData[(y * canvas.width + x) * 4 + 3] > 0) {
-                        points.push({ x: (x - canvas.width / 2) / 5, y: (canvas.height / 2 - y) / 5, z: 0 }); // z=0 để thẳng
                     }
                 }
             }
@@ -366,6 +333,7 @@
                 if (fingerCount === 0) newState = '0';
                 else if (fingerCount === 1) newState = '1';
                 else if (fingerCount === 2) newState = '2';
+                else if (fingerCount === 3) newState = '3';
                 else if (fingerCount === 5) newState = '5';
 
                 if (newState !== currentState) {
