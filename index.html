@@ -22,7 +22,7 @@
             width: 100vw;
             height: 100vh;
         }
-        canvas {
+        #three-canvas {
             display: block;
             position: absolute;
             top: 0;
@@ -30,8 +30,24 @@
             width: 100%;
             height: 100%;
         }
-        video {
-            display: none; /* Ẩn video camera */
+        #video {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 320px;
+            height: 240px;
+            border: 2px solid #ffffff;
+            border-radius: 10px;
+            opacity: 0.8; /* Nền mờ nhẹ */
+            z-index: 5;
+        }
+        #landmark-canvas {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 320px;
+            height: 240px;
+            z-index: 10;
         }
         #color-picker {
             position: absolute;
@@ -45,7 +61,7 @@
         }
         #instructions {
             position: absolute;
-            bottom: 20px;
+            top: 20px;
             left: 20px;
             z-index: 10;
             font-size: 14px;
@@ -55,36 +71,38 @@
     <!-- Bao gồm thư viện MediaPipe Hands qua CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/hands.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils@0.3/drawing_utils.js"></script>
     <!-- Bao gồm Three.js cho 3D -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 </head>
 <body>
     <div id="container">
-        <canvas id="canvas"></canvas>
-        <video id="video"></video>
+        <canvas id="three-canvas"></canvas>
+        <video id="video" playsinline></video>
+        <canvas id="landmark-canvas"></canvas>
         <input type="color" id="color-picker" value="#ffffff">
     </div>
     <div id="instructions">
         <p>Sử dụng camera để nhận diện cử chỉ tay:</p>
         <ul>
+            <li>0 ngón (nắm tay): Co cụm</li>
             <li>1 ngón: Chữ "Thuý Lâm"</li>
             <li>2 ngón: Biểu tượng :)))</li>
-            <li>Mở tay (5 ngón): Explosion</li>
-            <li>Nắm tay (0 ngón): Co lại</li>
-            <li>Mặc định: Hình cầu</li>
+            <li>5 ngón (mở tay): Bung ra, đổi màu</li>
         </ul>
     </div>
     <script>
-        // Biến toàn cục
+        // Biến toàn cục cho Three.js
         let scene, camera, renderer;
-        let particles, particlePositions, particleVelocities;
-        let targetPositions = []; // Vị trí mục tiêu cho particles
-        let currentState = 'default'; // Trạng thái hiện tại: 'default', '1', '2', '5', '0'
-        let particleColor = new THREE.Color(0xffffff); // Màu mặc định
-        const numParticles = 5000; // Số lượng particles, có thể chỉnh sửa
-        const transitionSpeed = 0.05; // Tốc độ chuyển đổi (lerp factor), nhỏ hơn để mượt hơn
-        const springFactor = 0.1; // Yếu tố spring cho cảm giác vật lý
-        const damping = 0.9; // Giảm chấn cho velocity
+        let particles, particlePositions, particleVelocities, particleColors;
+        let targetPositions = []; // Vị trí mục tiêu
+        let currentState = 'default'; // Trạng thái: 'default', '0', '1', '2', '5'
+        let baseColor = new THREE.Color(0xffffff); // Màu cơ bản từ color picker
+        const numParticles = 5000; // Số lượng particles
+        const transitionSpeed = 0.05; // Tốc độ lerp
+        const springFactor = 0.1; // Spring cho vật lý
+        const damping = 0.9; // Giảm chấn
+        let time = 0; // Để animate màu cho trạng thái 5
 
         // Khởi tạo Three.js
         function initThree() {
@@ -92,25 +110,31 @@
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
             camera.position.z = 50;
 
-            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas'), antialias: true });
+            renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('three-canvas'), antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setClearColor(0x121212); // Nền tối khớp với body
+            renderer.setClearColor(0x121212);
 
-            // Tạo particles
+            // Tạo particles với màu
             const geometry = new THREE.BufferGeometry();
             particlePositions = new Float32Array(numParticles * 3);
-            particleVelocities = new Float32Array(numParticles * 3); // Velocity cho hiệu ứng vật lý
-            for (let i = 0; i < numParticles * 3; i++) {
-                particlePositions[i] = 0;
-                particleVelocities[i] = 0;
+            particleVelocities = new Float32Array(numParticles * 3);
+            particleColors = new Float32Array(numParticles * 3);
+            for (let i = 0; i < numParticles; i++) {
+                const idx = i * 3;
+                particlePositions[idx] = particlePositions[idx + 1] = particlePositions[idx + 2] = 0;
+                particleVelocities[idx] = particleVelocities[idx + 1] = particleVelocities[idx + 2] = 0;
+                particleColors[idx] = Math.random(); // Ngẫu nhiên ban đầu
+                particleColors[idx + 1] = Math.random();
+                particleColors[idx + 2] = Math.random();
             }
             geometry.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+            geometry.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
 
-            const material = new THREE.PointsMaterial({ color: particleColor, size: 0.2 });
+            const material = new THREE.PointsMaterial({ size: 0.2, vertexColors: true });
             particles = new THREE.Points(geometry, material);
             scene.add(particles);
 
-            // Xử lý resize
+            // Resize listener
             window.addEventListener('resize', () => {
                 camera.aspect = window.innerWidth / window.innerHeight;
                 camera.updateProjectionMatrix();
@@ -120,11 +144,12 @@
             animate();
         }
 
-        // Hàm animation loop
+        // Animation loop
         function animate() {
             requestAnimationFrame(animate);
+            time += 0.01;
 
-            // Cập nhật vị trí particles với lerp và spring
+            // Cập nhật vị trí với lerp và spring
             for (let i = 0; i < numParticles; i++) {
                 const idx = i * 3;
                 for (let dim = 0; dim < 3; dim++) {
@@ -137,13 +162,39 @@
             }
             particles.geometry.attributes.position.needsUpdate = true;
 
-            // Xoay nhẹ để xem 3D
+            // Cập nhật màu
+            updateParticleColors();
+
+            // Xoay nhẹ
             particles.rotation.y += 0.001;
 
             renderer.render(scene, camera);
         }
 
-        // Hàm generate target positions dựa trên trạng thái
+        // Cập nhật màu particles
+        function updateParticleColors() {
+            if (currentState === '5') {
+                // Đổi màu liên tục cho explosion
+                for (let i = 0; i < numParticles; i++) {
+                    const idx = i * 3;
+                    particleColors[idx] = Math.sin(time + i * 0.01) * 0.5 + 0.5;
+                    particleColors[idx + 1] = Math.cos(time + i * 0.02) * 0.5 + 0.5;
+                    particleColors[idx + 2] = Math.sin(time + i * 0.03) * 0.5 + 0.5;
+                }
+            } else {
+                // Gradient dựa trên vị trí hoặc ngẫu nhiên, nhân với baseColor
+                for (let i = 0; i < numParticles; i++) {
+                    const idx = i * 3;
+                    const gradient = (particlePositions[idx + 1] + 20) / 40; // Gradient theo y
+                    particleColors[idx] = baseColor.r * gradient;
+                    particleColors[idx + 1] = baseColor.g * (1 - gradient);
+                    particleColors[idx + 2] = baseColor.b;
+                }
+            }
+            particles.geometry.attributes.color.needsUpdate = true;
+        }
+
+        // Cập nhật target positions dựa trên trạng thái
         function updateTargetPositions(state) {
             if (state === 'default') {
                 generateSpherePositions();
@@ -158,7 +209,7 @@
             }
         }
 
-        // Generate positions cho hình cầu
+        // Hình cầu mặc định
         function generateSpherePositions() {
             const radius = 20;
             for (let i = 0; i < numParticles; i++) {
@@ -167,14 +218,13 @@
                 const x = radius * Math.sin(phi) * Math.cos(theta);
                 const y = radius * Math.sin(phi) * Math.sin(theta);
                 const z = radius * Math.cos(phi);
-                const idx = i * 3;
-                targetPositions[idx] = x;
-                targetPositions[idx + 1] = y;
-                targetPositions[idx + 2] = z;
+                targetPositions[i * 3] = x;
+                targetPositions[i * 3 + 1] = y;
+                targetPositions[i * 3 + 2] = z;
             }
         }
 
-        // Generate positions cho text sử dụng canvas 2D để sample points
+        // Tạo positions từ text sử dụng Canvas 2D
         function generateTextPositions(text) {
             const canvas = document.createElement('canvas');
             canvas.width = 512;
@@ -188,26 +238,18 @@
 
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
             const points = [];
-            for (let y = 0; y < canvas.height; y += 2) { // Sample every 2 pixels để giảm mật độ
-                for (let x = 0; x < canvas.width; x += 2) {
-                    const index = (y * canvas.width + x) * 4;
-                    if (imageData[index] > 128) { // Nếu pixel sáng
-                        points.push({ x: (x - canvas.width / 2) / 10, y: (canvas.height / 2 - y) / 10, z: 0 });
+            for (let y = 0; y < canvas.height; y += 3) { // Sample thưa hơn
+                for (let x = 0; x < canvas.width; x += 3) {
+                    if (imageData[(y * canvas.width + x) * 4] > 128) {
+                        points.push({ x: (x - canvas.width / 2) / 10, y: (canvas.height / 2 - y) / 10, z: (Math.random() - 0.5) * 2 });
                     }
                 }
             }
 
-            // Phân bổ particles vào points (nếu ít points hơn particles, lặp lại)
-            for (let i = 0; i < numParticles; i++) {
-                const p = points[i % points.length];
-                const idx = i * 3;
-                targetPositions[idx] = p.x + (Math.random() - 0.5) * 0.5; // Thêm noise nhỏ
-                targetPositions[idx + 1] = p.y + (Math.random() - 0.5) * 0.5;
-                targetPositions[idx + 2] = p.z + (Math.random() - 0.5) * 0.5;
-            }
+            assignPointsToTargets(points);
         }
 
-        // Generate positions cho emoji :))) - vẽ mặt cười đơn giản
+        // Tạo positions cho emoji :))) sử dụng Canvas 2D
         function generateEmojiPositions() {
             const canvas = document.createElement('canvas');
             canvas.width = 256;
@@ -217,148 +259,153 @@
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.strokeStyle = '#fff';
             ctx.lineWidth = 10;
-
-            // Vẽ vòng tròn mặt
             ctx.beginPath();
             ctx.arc(128, 128, 100, 0, Math.PI * 2);
             ctx.stroke();
-
-            // Vẽ mắt trái
             ctx.beginPath();
             ctx.arc(90, 100, 10, 0, Math.PI * 2);
             ctx.stroke();
-
-            // Vẽ mắt phải
             ctx.beginPath();
             ctx.arc(166, 100, 10, 0, Math.PI * 2);
             ctx.stroke();
-
-            // Vẽ miệng cười
             ctx.beginPath();
-            ctx.arc(128, 140, 60, 0, Math.PI);
+            ctx.arc(128, 160, 60, 0, Math.PI); // Miệng cười ngược vì coord y đảo
             ctx.stroke();
 
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
             const points = [];
-            for (let y = 0; y < canvas.height; y += 2) {
-                for (let x = 0; x < canvas.width; x += 2) {
-                    const index = (y * canvas.width + x) * 4;
-                    if (imageData[index + 3] > 0) { // Nếu pixel có alpha
-                        points.push({ x: (x - canvas.width / 2) / 5, y: (canvas.height / 2 - y) / 5, z: 0 });
+            for (let y = 0; y < canvas.height; y += 3) {
+                for (let x = 0; x < canvas.width; x += 3) {
+                    if (imageData[(y * canvas.width + x) * 4 + 3] > 0) {
+                        points.push({ x: (x - canvas.width / 2) / 5, y: (canvas.height / 2 - y) / 5, z: (Math.random() - 0.5) * 2 });
                     }
                 }
             }
 
+            assignPointsToTargets(points);
+        }
+
+        // Gán points vào targetPositions, lặp nếu cần
+        function assignPointsToTargets(points) {
             for (let i = 0; i < numParticles; i++) {
                 const p = points[i % points.length];
-                const idx = i * 3;
-                targetPositions[idx] = p.x;
-                targetPositions[idx + 1] = p.y;
-                targetPositions[idx + 2] = p.z;
+                targetPositions[i * 3] = p.x + (Math.random() - 0.5) * 0.5;
+                targetPositions[i * 3 + 1] = p.y + (Math.random() - 0.5) * 0.5;
+                targetPositions[i * 3 + 2] = p.z + (Math.random() - 0.5) * 0.5;
             }
         }
 
-        // Generate positions cho explosion: particles bay ra ngẫu nhiên
+        // Explosion: bay ra, bay nhẹ
         function generateExplosionPositions() {
             for (let i = 0; i < numParticles; i++) {
-                const direction = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
-                const distance = 50 + Math.random() * 50; // Bay xa
-                const idx = i * 3;
-                targetPositions[idx] = direction.x * distance;
-                targetPositions[idx + 1] = direction.y * distance;
-                targetPositions[idx + 2] = direction.z * distance;
+                const dir = new THREE.Vector3(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+                const dist = 50 + Math.random() * 50;
+                targetPositions[i * 3] = dir.x * dist;
+                targetPositions[i * 3 + 1] = dir.y * dist;
+                targetPositions[i * 3 + 2] = dir.z * dist;
             }
         }
 
-        // Generate positions cho cluster: gom về trung tâm
+        // Co cụm
         function generateClusterPositions() {
             for (let i = 0; i < numParticles; i++) {
-                const idx = i * 3;
-                targetPositions[idx] = (Math.random() - 0.5) * 5; // Gần trung tâm
-                targetPositions[idx + 1] = (Math.random() - 0.5) * 5;
-                targetPositions[idx + 2] = (Math.random() - 0.5) * 5;
+                targetPositions[i * 3] = (Math.random() - 0.5) * 5;
+                targetPositions[i * 3 + 1] = (Math.random() - 0.5) * 5;
+                targetPositions[i * 3 + 2] = (Math.random() - 0.5) * 5;
             }
         }
 
-        // Khởi tạo MediaPipe Hands
+        // Khởi tạo MediaPipe
         function initMediaPipe() {
             const videoElement = document.getElementById('video');
+            const landmarkCanvas = document.getElementById('landmark-canvas');
+            const landmarkCtx = landmarkCanvas.getContext('2d');
+
             const hands = new Hands({
                 locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${file}`,
             });
             hands.setOptions({
-                maxNumHands: 1, // Chỉ 1 tay
+                maxNumHands: 1,
                 modelComplexity: 1,
                 minDetectionConfidence: 0.5,
                 minTrackingConfidence: 0.5,
             });
-            hands.onResults(onHandResults);
+            hands.onResults((results) => {
+                // Vẽ landmarks
+                landmarkCtx.save();
+                landmarkCtx.clearRect(0, 0, landmarkCanvas.width, landmarkCanvas.height);
+                landmarkCtx.translate(landmarkCanvas.width, 0);
+                landmarkCtx.scale(-1, 1); // Lật ngang vì camera mirror
+                if (results.multiHandLandmarks) {
+                    for (const landmarks of results.multiHandLandmarks) {
+                        drawConnectors(landmarkCtx, landmarks, HAND_CONNECTIONS, {color: '#00FF00', lineWidth: 5});
+                        drawLandmarks(landmarkCtx, landmarks, {color: '#FF0000', lineWidth: 2});
+                    }
+                }
+                landmarkCtx.restore();
+
+                onHandResults(results);
+            });
 
             const camera = new Camera(videoElement, {
                 onFrame: async () => {
                     await hands.send({ image: videoElement });
                 },
-                width: 640,
-                height: 480,
+                width: 320,
+                height: 240,
             });
             camera.start();
         }
 
-        // Xử lý kết quả từ MediaPipe
+        // Xử lý kết quả MediaPipe
         function onHandResults(results) {
             if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 const landmarks = results.multiHandLandmarks[0];
                 const fingerCount = countFingers(landmarks);
-                let newState;
+                let newState = 'default';
                 if (fingerCount === 0) newState = '0';
                 else if (fingerCount === 1) newState = '1';
                 else if (fingerCount === 2) newState = '2';
                 else if (fingerCount === 5) newState = '5';
-                else newState = 'default';
 
                 if (newState !== currentState) {
                     currentState = newState;
                     updateTargetPositions(currentState);
                 }
-            } else {
-                if (currentState !== 'default') {
-                    currentState = 'default';
-                    updateTargetPositions('default');
-                }
+            } else if (currentState !== 'default') {
+                currentState = 'default';
+                updateTargetPositions('default');
             }
         }
 
-        // Hàm đếm số ngón tay giơ lên (giả sử tay phải, hướng camera)
+        // Đếm ngón tay
         function countFingers(landmarks) {
             let count = 0;
-            const tips = [4, 8, 12, 16, 20]; // Thumb, Index, Middle, Ring, Pinky tips
-            const pips = [2, 5, 9, 13, 17]; // PIP joints
-
+            const tips = [4, 8, 12, 16, 20];
+            const pips = [2, 5, 9, 13, 17];
             for (let i = 0; i < tips.length; i++) {
-                const tip = landmarks[tips[i]];
-                const pip = landmarks[pips[i]];
-                const mcp = landmarks[pips[i] - 1]; // MCP joint
-
-                // Kiểm tra nếu tip cao hơn pip (ngón giơ lên), điều chỉnh cho thumb riêng
-                if (i === 0) { // Thumb
-                    if (Math.abs(tip.x - pip.x) > Math.abs(tip.y - pip.y)) count++;
-                } else {
-                    if (tip.y < pip.y && pip.y < mcp.y) count++;
+                const tipY = landmarks[tips[i]].y;
+                const pipY = landmarks[pips[i]].y;
+                if (i === 0) { // Thumb: kiểm tra x thay vì y
+                    const tipX = landmarks[tips[i]].x;
+                    const pipX = landmarks[pips[i]].x;
+                    if (Math.abs(tipX - pipX) > 0.05) count++;
+                } else if (tipY < pipY) {
+                    count++;
                 }
             }
             return count;
         }
 
-        // Xử lý color picker
+        // Color picker listener
         document.getElementById('color-picker').addEventListener('input', (e) => {
-            particleColor.set(e.target.value);
-            particles.material.color = particleColor;
+            baseColor.set(e.target.value);
         });
 
         // Khởi động
         initThree();
         initMediaPipe();
-        updateTargetPositions('default'); // Bắt đầu với mặc định
+        generateSpherePositions(); // Bắt đầu default
     </script>
 </body>
 </html>
