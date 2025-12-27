@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ô tô kê</title>
+    <title>Hiệu Ứng Particles Với Nhận Diện Cử Chỉ Tay</title>
     <style>
         body {
             margin: 0;
@@ -86,9 +86,9 @@
         <p>Sử dụng camera để nhận diện cử chỉ tay:</p>
         <ul>
             <li>0 ngón (nắm tay): Co cụm</li>
-            <li>1 ngón: Chữ "hello"</li>
-            <li>2 ngón: Chữ "tao"</li>
-            <li>3 ngón: Chữ "trùm trường"</li>
+            <li>1 ngón: Chữ "HELLO"</li>
+            <li>2 ngón: Chữ "TAO LÀ"</li>
+            <li>3 ngón: Chữ "TRÙM TRƯỜNG"</li>
             <li>5 ngón (mở tay): Bung ra, đổi màu</li>
         </ul>
     </div>
@@ -200,11 +200,11 @@
             if (state === 'default') {
                 generateSpherePositions();
             } else if (state === '1') {
-                generateTextPositions('hello');
+                generateTextPositions('HELLO');
             } else if (state === '2') {
-                generateTextPositions('tao');
+                generateTextPositions('TAO LÀ');
             } else if (state === '3') {
-                generateTextPositions('trùm trường');
+                generateTextPositions('TRÙM TRƯỜNG');
             } else if (state === '5') {
                 generateExplosionPositions();
             } else if (state === '0') {
@@ -237,7 +237,9 @@
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.font = 'bold 80px Arial';
             ctx.fillStyle = '#fff';
-            ctx.fillText(text, 50, 150);
+            ctx.textAlign = 'center'; // Căn giữa
+            ctx.textBaseline = 'middle'; // Căn giữa theo chiều dọc
+            ctx.fillText(text.toUpperCase(), canvas.width / 2, canvas.height / 2); // Vẽ ở giữa và viết hoa
 
             const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
             const points = [];
